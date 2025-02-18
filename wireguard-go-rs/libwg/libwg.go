@@ -9,6 +9,7 @@ package main
 // #include <stdio.h>
 // #include <stdlib.h>
 // #include <stdint.h>
+// #include <string.h>
 import "C"
 
 import (
@@ -75,19 +76,29 @@ func wgTurnOff(tunnelHandle int32) {
 }
 
 //export wgGetConfig
-func wgGetConfig(tunnelHandle int32) *C.char {
+func wgGetConfig(tunnelHandle int32, cConfigOut *C.char, cConfigOutSize C.size_t) C.int32_t {
 	tunnel, err := tunnels.Get(tunnelHandle)
 	if err != nil {
-		return nil
+		return ERROR_INVALID_ARGUMENT
 	}
 	settings := new(bytes.Buffer)
 	writer := bufio.NewWriter(settings)
 	if err := tunnel.Device.IpcGetOperation(writer); err != nil {
 		tunnel.Logger.Errorf("Failed to get config for tunnel: %s\n", err)
-		return nil
+		return ERROR_INVALID_ARGUMENT
 	}
 	writer.Flush()
-	return C.CString(settings.String())
+
+	goStr := settings.String()
+	if int(cConfigOutSize) <= len(goStr) {
+		tunnel.Logger.Errorf("Config buffer too small\n")
+		return ERROR_INVALID_ARGUMENT
+	}
+	cSettings := C.CString(settings.String())
+	C.strcpy(cConfigOut, cSettings)
+	C.free(unsafe.Pointer(cSettings))
+
+	return 0
 }
 
 //export wgSetConfig
@@ -118,11 +129,11 @@ func wgFreePtr(ptr unsafe.Pointer) {
 
 func main() {}
 
-//Instead of using the normal version of C.GoString we need to use the version that takes
-//a length argument (C.GoStringN). That is because the normal C.GoString reads a whole
-//page of memory to determine the length of the string. This causes a crash if
-//mte is turned on. So instead we determine the length of the c string by reading
-//each character until we reach the end of the string.
+// Instead of using the normal version of C.GoString we need to use the version that takes
+// a length argument (C.GoStringN). That is because the normal C.GoString reads a whole
+// page of memory to determine the length of the string. This causes a crash if
+// mte is turned on. So instead we determine the length of the c string by reading
+// each character until we reach the end of the string.
 func goStringFixed(cString *C.char) string {
 	ptr := unsafe.Pointer(cString)
 	i := 0

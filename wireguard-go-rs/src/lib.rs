@@ -10,13 +10,11 @@ use core::ffi::{c_char, CStr};
 use core::mem::ManuallyDrop;
 #[cfg(target_os = "windows")]
 use core::mem::MaybeUninit;
-use core::slice;
 #[cfg(target_os = "windows")]
 use std::ffi::CString;
 use util::OnDrop;
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::NetworkManagement::Ndis::NET_LUID_LH;
-use zeroize::Zeroize;
 
 mod util;
 
@@ -212,34 +210,12 @@ impl Tunnel {
     /// zeroizing them afterwards.
     // NOTE: this could return a guard type with a custom Drop impl instead, but me lazy.
     pub fn get_config<T>(&self, f: impl FnOnce(&CStr) -> T) -> Option<T> {
-        let ptr = unsafe { ffi::wgGetConfig(self.handle) };
-
-        if ptr.is_null() {
-            return None;
-        }
-
-        // SAFETY: we checked for null, and wgGetConfig promises that this is a valid cstr
-        let config = unsafe { CStr::from_ptr(ptr) };
-        let config_len = config.to_bytes().len();
-
-        // execute cleanup code on Drop to make sure that it happens even if `f` panics
-        let on_drop = OnDrop::new(|| {
-            {
-                // SAFETY:
-                // we checked for null, and wgGetConfig promises that this is a valid cstr.
-                // config_len comes from the CStr above, so it should be good.
-                let config_bytes = unsafe { slice::from_raw_parts_mut(ptr, config_len) };
-                config_bytes.zeroize();
-            }
-
-            // SAFETY: the pointer was created by wgGetConfig, and we are no longer using it.
-            unsafe { ffi::wgFreePtr(ptr.cast()) };
-        });
-
+        let mut buf = vec![0u8; 1024 * 1024];
+        let code = unsafe { ffi::wgGetConfig(self.handle, buf.as_mut_ptr() as _, buf.len()) };
+        result_from_code(code).ok()?;
+        let config = CStr::from_bytes_until_nul(&buf).unwrap();
+        // TODO: zeroize
         let t = f(config);
-        let _ = config;
-        drop(on_drop);
-
         Some(t)
     }
 
@@ -397,7 +373,7 @@ mod ffi {
         /// # Safety:
         /// - The function returns an owned pointer to a null-terminated UTF-8 string.
         /// - The pointer may only be freed using [wgFreePtr].
-        pub fn wgGetConfig(handle: i32) -> *mut c_char;
+        pub fn wgGetConfig(handle: i32, settings_out: *mut c_char, settings_size: usize) -> i32;
 
         /// Set the config of the WireGuard interface.
         ///
@@ -429,9 +405,6 @@ mod ffi {
             events_capacity: u32,
             actions_capacity: u32,
         ) -> i32;
-
-        /// Free a pointer allocated by the go runtime - useful to free return value of wgGetConfig
-        pub fn wgFreePtr(ptr: *mut c_void);
 
         /// Get the file descriptor of the tunnel IPv4 socket.
         #[cfg(target_os = "android")]
