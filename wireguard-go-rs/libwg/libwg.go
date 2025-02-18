@@ -135,7 +135,7 @@ func main() {}
 // mte is turned on. So instead we determine the length of the c string by reading
 // each character until we reach the end of the string.
 func goStringFixed(cString *C.char) string {
-	ptr := unsafe.Pointer(cString)
+	/*ptr := unsafe.Pointer(cString)
 	i := 0
 	for {
 		byte := (*C.char)(unsafe.Pointer(uintptr(ptr) + uintptr(i)))
@@ -147,5 +147,6 @@ func goStringFixed(cString *C.char) string {
 		i += 1
 	}
 
-	return C.GoStringN(cString, C.int(i))
+	return C.GoStringN(cString, C.int(i))*/
+	return C.GoString(cString)
 }
