@@ -18,6 +18,7 @@ use mullvad_daemon::{
 };
 use std::{
     io,
+    os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
     sync::{Arc, Mutex, Once, OnceLock},
 };
@@ -224,6 +225,11 @@ fn start_logging_inner(log_dir: &Path) -> Result<(), logging::Error> {
 
     logging::init_logger(log::LevelFilter::Debug, Some(&log_file), true)?;
     exception_logging::enable();
+    exception_logging::set_log_file(
+        std::ffi::CString::new(log_file.as_os_str().as_bytes())
+            .map_err(|_| "Log file path contains null-bytes".to_string())
+            .unwrap(),
+    );
     log_panics::init();
 
     Ok(())
