@@ -7,7 +7,7 @@ use std::{
 };
 use tokio::net::UdpSocket;
 
-use h3::{client, ext::Protocol, proto::varint::VarInt};
+use h3::{client, ext::Protocol, proto::varint::VarInt, quic::StreamId};
 use h3_datagram::client::ClientHandleDatagramsExt;
 use http::{uri::Scheme, Response, StatusCode};
 use quinn::{crypto::rustls::QuicClientConfig, ClientConfig, Endpoint, TransportConfig};
@@ -179,8 +179,7 @@ impl Client {
 
     pub async fn run(mut self) -> Result<()> {
         const BUF_SIZE: usize = 1700;
-        let stream_id: VarInt = self.request_stream.id().into();
-        let quarter_stream_id = stream_id / 4;
+        let stream_id: StreamId = self.request_stream.id();
         let context_id: VarInt = h3::quic::StreamId::try_from(0)
             .expect("need to be able to create stream IDs with 0, no?")
             .into();
@@ -192,19 +191,19 @@ impl Client {
             Into::<VarInt>::into(context_id).encode(&mut client_read_buf);
             tokio::select! {
                 client_read = self.client_socket.recv_buf_from(&mut client_read_buf) => {
-                    println!("Received bytes, sending to stream ID {stream_id} via quarter stream id {quarter_stream_id}");
                     let (_bytes_received, recv_addr) = client_read.map_err(Error::ClientRead)?;
                     return_addr = recv_addr;
                     let send_buf = client_read_buf.split();
 
                     self.connection
-                        .send_datagram(quarter_stream_id.into(), send_buf.freeze())
+                        .send_datagram(stream_id, send_buf.freeze())
                         .map_err(Error::SendDatagram)?;
                 },
                 server_response = self.connection.read_datagram() => {
                     match server_response {
                         Ok(Some(response)) => {
-                            if VarInt::from(response.stream_id()) != quarter_stream_id {
+                            if response.stream_id() != stream_id {
+                                // log::trace!("Received unexpected stream ID from server");
                                 continue;
                             }
                             let mut payload = response.into_payload();
