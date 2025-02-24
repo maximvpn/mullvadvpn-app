@@ -1,7 +1,7 @@
-use bytes::{Buf, Bytes, BytesMut};
+use bytes::{Buf, BytesMut};
 use std::{
     fs, future, io,
-    net::{IpAddr, Ipv4Addr, SocketAddr},
+    net::{Ipv4Addr, SocketAddr},
     path::Path,
     sync::{Arc, LazyLock},
 };
@@ -18,11 +18,11 @@ const LE_ROOT_CERT: &[u8] = include_bytes!("../../../mullvad-api/le_root_cert.pe
 
 pub struct Client {
     client_socket: UdpSocket,
-    /// QUIC connection
+    /// QUIC connection, used to send the actual HTTP datagrams
     connection: h3::client::Connection<h3_quinn::Connection, bytes::Bytes>,
-    // this field exists only to c
-    /// Send stream over a QUIC connection, to be used to receive proxy traffic
-    send_stream: client::SendRequest<h3_quinn::OpenStreams, bytes::Bytes>,
+    /// Send stream over a QUIC connection - this needs to be kept alive to not close the HTTP
+    /// QUIC stream.
+    _send_stream: client::SendRequest<h3_quinn::OpenStreams, bytes::Bytes>,
     /// Request stream for the currently open request, must not be dropped, otherwise proxy
     /// connection is terminated
     request_stream: client::RequestStream<h3_quinn::BidiStream<bytes::Bytes>, bytes::Bytes>,
@@ -55,6 +55,8 @@ pub enum Error {
     ProxyResponse(h3::Error),
     /// Failed to construct a URI
     Uri(http::Error),
+    /// Failed to send datagram to proxy
+    SendDatagram(h3::Error),
     ReadCerts(io::Error),
     ParseCerts,
 }
@@ -129,8 +131,8 @@ impl Client {
         Ok(Self {
             connection,
             client_socket,
-            send_stream,
             request_stream,
+            _send_stream: send_stream,
         })
     }
 
@@ -146,6 +148,7 @@ impl Client {
     )> {
         let (mut connection, mut send_stream) = client::builder()
             .max_field_section_size(MAX_HEADER_SIZE)
+            .enable_datagram(true)
             .send_grease(true)
             .build(h3_quinn::Connection::new(connection))
             .await
@@ -193,9 +196,10 @@ impl Client {
                     let (_bytes_received, recv_addr) = client_read.map_err(Error::ClientRead)?;
                     return_addr = recv_addr;
                     let send_buf = client_read_buf.split();
-                    let result = self.connection.send_datagram(quarter_stream_id.into(), send_buf.freeze());
-                    println!("Lmao {result:?}");
-                    // self.request_stream.send_data(send_buf.freeze()).await;
+
+                    self.connection
+                        .send_datagram(quarter_stream_id.into(), send_buf.freeze())
+                        .map_err(Error::SendDatagram)?;
                 },
                 server_response = self.connection.read_datagram() => {
                     match server_response {
