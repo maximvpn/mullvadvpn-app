@@ -208,8 +208,9 @@ impl Client {
                             }
                             let mut payload = response.into_payload();
                             let received_stream_id = VarInt::decode(&mut payload);
+                            // TODO: Explain what this context_id means
                             if received_stream_id  != Ok(context_id) {
-                                println!("Unsupported datagram with stream ID {stream_id:?}");
+                                // log::trace!("Unsupported datagram with stream ID {stream_id:?}");
                                 continue;
                             }
 
@@ -219,7 +220,6 @@ impl Client {
                                 .map_err(Error::ClientWrite)?;
                         }
                         Ok(None) => {
-                            println!("this lol lmao");
                             return Ok(());
                         }
                         Err(err) => {
