@@ -8,7 +8,7 @@ use std::{
 use tokio::net::UdpSocket;
 
 use h3::{client, ext::Protocol, proto::varint::VarInt, quic::StreamId};
-use h3_datagram::client::ClientHandleDatagramsExt;
+use h3_datagram::datagram_traits::HandleDatagramsExt;
 use http::{uri::Scheme, Response, StatusCode};
 use quinn::{crypto::rustls::QuicClientConfig, ClientConfig, Endpoint, TransportConfig};
 

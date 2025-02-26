@@ -1448,7 +1448,7 @@ dependencies = [
 [[package]]
 name = "h3"
 version = "0.0.6"
-source = "git+https://github.com/mullvad/h3?rev=3b7f6ff2b12d6a937fd04e9a6d6c309c4130cca5#3b7f6ff2b12d6a937fd04e9a6d6c309c4130cca5"
+source = "git+https://github.com/mullvad/h3?rev=01ae01192300d29abaf6a3233d862e40c9f92bac#01ae01192300d29abaf6a3233d862e40c9f92bac"
 dependencies = [
  "bytes",
  "fastrand",
@@ -1461,7 +1461,7 @@ dependencies = [
 [[package]]
 name = "h3-datagram"
 version = "0.0.1"
-source = "git+https://github.com/mullvad/h3?rev=3b7f6ff2b12d6a937fd04e9a6d6c309c4130cca5#3b7f6ff2b12d6a937fd04e9a6d6c309c4130cca5"
+source = "git+https://github.com/mullvad/h3?rev=01ae01192300d29abaf6a3233d862e40c9f92bac#01ae01192300d29abaf6a3233d862e40c9f92bac"
 dependencies = [
  "bytes",
  "h3",
@@ -1471,7 +1471,7 @@ dependencies = [
 [[package]]
 name = "h3-quinn"
 version = "0.0.7"
-source = "git+https://github.com/mullvad/h3?rev=3b7f6ff2b12d6a937fd04e9a6d6c309c4130cca5#3b7f6ff2b12d6a937fd04e9a6d6c309c4130cca5"
+source = "git+https://github.com/mullvad/h3?rev=01ae01192300d29abaf6a3233d862e40c9f92bac#01ae01192300d29abaf6a3233d862e40c9f92bac"
 dependencies = [
  "bytes",
  "futures",
