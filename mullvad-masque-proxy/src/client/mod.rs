@@ -178,12 +178,12 @@ impl Client {
     }
 
     pub async fn run(mut self) -> Result<()> {
-        const BUF_SIZE: usize = 1700;
         let stream_id: StreamId = self.request_stream.id();
+        // this is the variable ID used to signify UDP payloads in HTTP datagrams.
         let context_id: VarInt = h3::quic::StreamId::try_from(0)
             .expect("need to be able to create stream IDs with 0, no?")
             .into();
-        let mut client_read_buf = BytesMut::with_capacity(BUF_SIZE);
+        let mut client_read_buf = BytesMut::with_capacity(crate::PACKET_BUFFER_SIZE);
 
         println!("Starting");
         let mut return_addr = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0);
@@ -229,7 +229,7 @@ impl Client {
                 },
             };
 
-            let _ = client_read_buf.try_reclaim(BUF_SIZE);
+            client_read_buf.reserve(crate::PACKET_BUFFER_SIZE);
         }
     }
 }
