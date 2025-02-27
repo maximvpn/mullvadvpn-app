@@ -9,6 +9,7 @@ use mullvad_api::{
 mod api;
 mod cancellation;
 mod completion;
+mod mock;
 mod response;
 
 #[repr(C)]
