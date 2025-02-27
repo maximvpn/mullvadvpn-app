@@ -27,7 +27,9 @@ typedef struct ExchangeCancelToken ExchangeCancelToken;
 typedef struct RequestCancelHandle RequestCancelHandle;
 
 typedef struct SwiftServerMock {
-  const void *_0;
+  const void *server_ptr;
+  const void *mock_ptr;
+  uint16_t port;
 } SwiftServerMock;
 
 typedef struct SwiftApiContext {
