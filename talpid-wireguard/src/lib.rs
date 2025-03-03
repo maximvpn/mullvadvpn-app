@@ -3,7 +3,6 @@
 #![deny(missing_docs)]
 
 use self::config::Config;
-use boringtun::BoringTun;
 #[cfg(windows)]
 use futures::channel::mpsc;
 use futures::future::Future;
@@ -37,7 +36,9 @@ use talpid_types::{
 };
 use tokio::sync::Mutex as AsyncMutex;
 
+#[cfg(feature = "boringtun")]
 mod boringtun;
+
 /// WireGuard config data-types
 pub mod config;
 mod connectivity;
@@ -728,22 +729,19 @@ impl WireguardMonitor {
     ) -> Result<TunnelType> {
         log::debug!("Tunnel MTU: {}", config.mtu);
 
-        let tunnel = runtime
-            .block_on(Self::open_boringtun_tunnel(config, log_path, tun_provider))
-            .map(Box::new)?;
-        return Ok(tunnel);
+        let userspace_wireguard =
+            *FORCE_USERSPACE_WIREGUARD || config.daita || cfg!(feature = "boringtun");
 
-        let userspace_wireguard = *FORCE_USERSPACE_WIREGUARD || config.daita;
         if userspace_wireguard {
             log::debug!("Using userspace WireGuard implementation");
 
-            let tunnel = runtime
-                .block_on(Self::open_wireguard_go_tunnel(
-                    config,
-                    log_path,
-                    tun_provider,
-                ))
-                .map(Box::new)?;
+            #[cfg(not(feature = "boringtun"))]
+            let f = Self::open_wireguard_go_tunnel(config, log_path, tun_provider);
+
+            #[cfg(feature = "boringtun")]
+            let f = Self::open_boringtun_tunnel(config, log_path, tun_provider);
+
+            let tunnel = runtime.block_on(f).map(Box::new)?;
             Ok(tunnel)
         } else {
             let res = if will_nm_manage_dns() {
@@ -836,6 +834,7 @@ impl WireguardMonitor {
     }
 
     /// Configure and start a boringtun tunnel.
+    #[cfg(feature = "boringtun")]
     async fn open_boringtun_tunnel(
         config: &Config,
         log_path: Option<&Path>,
@@ -845,15 +844,21 @@ impl WireguardMonitor {
         //#[cfg(target_os = "android")] connectivity_check: connectivity::Check<
         //    connectivity::Cancellable,
         //>,
-    ) -> Result<BoringTun> {
+    ) -> Result<boringtun::BoringTun> {
         let routes = config
             .get_tunnel_destinations()
             .flat_map(Self::replace_default_prefixes);
 
-        let tunnel =
-            BoringTun::start_tunnel(config, log_path, tun_provider, routes, route_manager_handle)
-                .await
-                .map_err(Error::TunnelError)?;
+        let tunnel = boringtun::BoringTun::start_tunnel(
+            config,
+            log_path,
+            tun_provider,
+            routes,
+            #[cfg(target_os = "android")]
+            route_manager_handle,
+        )
+        .await
+        .map_err(Error::TunnelError)?;
 
         Ok(tunnel)
     }
@@ -1189,6 +1194,7 @@ pub enum TunnelError {
     DaitaNotSupported,
 
     /// BoringTun device error
+    #[cfg(feature = "boringtun")]
     #[error("Boringtun: {0:?}")]
     BoringTunDevice(::boringtun::device::Error),
 }

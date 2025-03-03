@@ -10,9 +10,12 @@ rust-version.workspace = true
 [lints]
 workspace = true
 
+[features]
+#default = ["boringtun"] # uncomment if working on boringtun
+boringtun = ["dep:boringtun"]
+
 [dependencies]
 async-trait = "0.1"
-boringtun = { path = "../../boringtun/boringtun", features = ["device"] }
 thiserror = { workspace = true }
 futures = { workspace = true }
 hex = "0.4"
@@ -37,6 +40,14 @@ byteorder = "1"
 internet-checksum = "0.2"
 socket2 = { workspace = true, features = ["all"] }
 tokio-stream = { version = "0.1", features = ["io-util"] }
+
+[dependencies.boringtun]
+optional = true
+features = ["device"]
+#path = "../../boringtun/boringtun"
+git = "https://github.com/mullvad/boringtun"
+rev = "252229be89e9c97db9e28c2dc943d331c70e1c37"
+#branch = "tokio"
 
 [target.'cfg(unix)'.dependencies]
 nix = "0.23"
