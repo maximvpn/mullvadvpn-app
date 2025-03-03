@@ -22,10 +22,6 @@ use tokio::net::UdpSocket;
 pub enum Error {
     BadTlsConfig(quinn::crypto::rustls::NoInitialCipherSuite),
     BindSocket(io::Error),
-    ReadCert(io::Error),
-    ReadPrivateKey(io::Error),
-    LoadCert(&'static str),
-    RustlsConfig(rustls::Error),
     SendNegotiationResponse(h3::Error),
 }
 
@@ -71,7 +67,7 @@ impl Server {
 
     pub async fn run(self) -> Result<()> {
         while let Some(new_connection) = self.endpoint.accept().await {
-            let _ = tokio::spawn(Self::handle_incoming_connection(
+            tokio::spawn(Self::handle_incoming_connection(
                 new_connection,
                 self.allowed_hosts.clone(),
             ));
@@ -104,9 +100,7 @@ impl Server {
                     }
 
                     // indicating no more streams to be received
-                    Ok(None) => {
-                        return;
-                    }
+                    Ok(None) => {}
 
                     Err(err) => {
                         println!("error on accept {}", err);
@@ -137,6 +131,10 @@ impl Server {
         let Ok(udp_socket) = UdpSocket::bind(bind_addr).await else {
             return handle_failed_socket(stream).await;
         };
+        if let Err(err) = udp_socket.connect(target_addr).await {
+            println!("Failed to set destination for UDP socket: {err}");
+            return handle_failed_socket(stream).await;
+        };
 
         if handle_established_connection(&mut stream).await.is_err() {
             return;
@@ -150,10 +148,10 @@ impl Server {
             .expect("need to be able to create stream IDs with 0, no?")
             .into();
 
+        context_id.encode(&mut proxy_recv_buf);
         loop {
             tokio::select! {
                 client_send = connection.read_datagram() => {
-                    println!("Received datagram from client");
                     match client_send {
                             Ok(Some(received_packet)) => {
                                 if received_packet.stream_id() != stream_id {
@@ -178,17 +176,21 @@ impl Server {
                             },
                     }
                 },
-                recv_result = udp_socket.recv_from(&mut proxy_recv_buf) => {
+                recv_result = udp_socket.recv_buf_from(&mut proxy_recv_buf) => {
                     match recv_result {
                         Ok((_bytes_received, sender_addr)) => {
                             if sender_addr != target_addr {
                                 continue
                             }
+                            let send_buf = proxy_recv_buf.split();
 
-                            if connection.send_datagram(stream_id, proxy_recv_buf.split().into()).is_err() {
+                            let send_buf = send_buf.freeze();
+                            if connection.send_datagram(stream_id, send_buf).is_err() {
                                 return;
                             }
+
                             proxy_recv_buf.reserve(crate::PACKET_BUFFER_SIZE);
+                            context_id.encode(&mut proxy_recv_buf);
                         },
                         Err(err) => {
                             println!("Failed to read from proxy target: {err}");
@@ -230,23 +232,6 @@ async fn handle_failed_socket<T: BidiStream<Bytes>>(mut stream: RequestStream<T,
         .body(())
         .unwrap();
     let _ = stream.send_response(response).await;
-}
-
-pub fn load_server_config(key: &Path, cert: &Path) -> Result<rustls::ServerConfig> {
-    let cert = CertificateDer::from(std::fs::read(cert).map_err(Error::ReadCert)?);
-
-    let key = PrivateKeyDer::try_from(std::fs::read(key).map_err(Error::ReadCert)?)
-        .map_err(Error::LoadCert)?;
-
-    let mut tls_config = rustls::ServerConfig::builder()
-        .with_no_client_auth()
-        .with_single_cert(vec![cert], key)
-        .map_err(Error::RustlsConfig)?;
-
-    tls_config.max_early_data_size = u32::MAX;
-    tls_config.alpn_protocols = vec![b"h3".into()];
-
-    Ok(tls_config)
 }
 
 fn get_target_socketaddr(request_path: &str) -> Option<SocketAddr> {
