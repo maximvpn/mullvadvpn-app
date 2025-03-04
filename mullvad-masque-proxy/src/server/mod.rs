@@ -2,7 +2,6 @@ use std::{
     collections::HashSet,
     io,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
-    path::Path,
     sync::Arc,
 };
 
@@ -15,8 +14,9 @@ use h3::{
 use h3_datagram::datagram_traits::HandleDatagramsExt;
 use http::{Request, StatusCode};
 use quinn::{crypto::rustls::QuicServerConfig, Endpoint, Incoming};
-use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use tokio::net::UdpSocket;
+
+use crate::fragment::Fragments;
 
 #[derive(Debug)]
 pub enum Error {
@@ -32,6 +32,8 @@ const MASQUE_WELL_KNOWN_PATH: &str = "/.well-known/masque/udp/";
 pub struct Server {
     endpoint: Endpoint,
     allowed_hosts: AllowedIps,
+    max_packet_size: u16,
+    fragments: Fragments,
 }
 
 #[derive(Clone)]
@@ -50,6 +52,7 @@ impl Server {
         bind_addr: SocketAddr,
         allowed_hosts: HashSet<IpAddr>,
         tls_config: Arc<rustls::ServerConfig>,
+        max_packet_size: u16,
     ) -> Result<Self> {
         let server_config = quinn::ServerConfig::with_crypto(Arc::new(
             QuicServerConfig::try_from(tls_config).map_err(Error::BadTlsConfig)?,
@@ -62,6 +65,8 @@ impl Server {
             allowed_hosts: AllowedIps {
                 hosts: Arc::new(allowed_hosts),
             },
+            max_packet_size,
+            fragments: Fragments::default(),
         })
     }
 
@@ -91,7 +96,7 @@ impl Server {
 
                 match connection.accept().await {
                     Ok(Some((req, stream))) => {
-                        tokio::spawn(Self::handle_request(
+                        tokio::spawn(Self::handle_proxy_request(
                             connection,
                             req,
                             stream,
@@ -114,11 +119,12 @@ impl Server {
         }
     }
 
-    async fn handle_request<T: BidiStream<Bytes>>(
+    async fn handle_proxy_request<T: BidiStream<Bytes>>(
         mut connection: Connection<h3_quinn::Connection, Bytes>,
         request: Request<()>,
         mut stream: RequestStream<T, Bytes>,
         allowed_hosts: AllowedIps,
+        maximum_packet_size: u16,
     ) {
         let Some(target_addr) = get_target_socketaddr(request.uri().path()) else {
             return;
@@ -148,6 +154,9 @@ impl Server {
             .expect("need to be able to create stream IDs with 0, no?")
             .into();
 
+        let mut fragments = Fragments::default();
+        let mut fragment_id = 0u16;
+
         context_id.encode(&mut proxy_recv_buf);
         loop {
             tokio::select! {
@@ -159,13 +168,26 @@ impl Server {
                                     continue;
                                 }
                                 let mut payload = received_packet.into_payload();
-                                let received_stream_id = VarInt::decode(&mut payload);
+                                let datagram_context_id = VarInt::decode(&mut payload);
 
-                                if received_stream_id  != Ok(context_id) {
-                                    // probably an unsupported type of payload
-                                    continue;
+                                match datagram_context_id {
+                                    Ok(crate::HTTP_MASQUE_DATAGRAM_CONTEXT_ID) => {
+                                        let _ = udp_socket.send_to(&payload, target_addr).await;
+                                    },
+                                    Ok(crate::HTTP_MASQUE_FRAGMENTED_DATAGRAM_CONTEXT_ID) => {
+                                        if let Ok(Some(payload)) = fragments.insert(payload) {
+                                            let _ = udp_socket.send_to(&payload, target_addr).await;
+                                        }
+
+                                    },
+                                    Ok(_unknown_context_id) => {
+                                        // log::trace!("Received unknown context ID {unknown_context_id}");
+                                        continue
+                                    },
+                                    _ => continue,
+
                                 }
-                                let _ = udp_socket.send_to(&payload, target_addr).await;
+
                             },
                             Ok(None) => {
                                 return;
@@ -185,9 +207,14 @@ impl Server {
                             let send_buf = proxy_recv_buf.split();
 
                             let send_buf = send_buf.freeze();
-                            if connection.send_datagram(stream_id, send_buf).is_err() {
-                                return;
+                            if send_buf.len() < maximum_packet_size {
+                                if connection.send_datagram(stream_id, send_buf).is_err() {
+                                    return;
+                                }
+                            } else {
+
                             }
+
 
                             proxy_recv_buf.reserve(crate::PACKET_BUFFER_SIZE);
                             context_id.encode(&mut proxy_recv_buf);
@@ -203,6 +230,8 @@ impl Server {
         }
     }
 }
+
+async fn handle_large_packet()
 
 async fn handle_established_connection<T: BidiStream<Bytes>>(
     stream: &mut RequestStream<T, Bytes>,
