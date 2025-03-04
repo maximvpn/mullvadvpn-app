@@ -28,10 +28,8 @@ pub struct BoringTun {
     config_tx: ConfigTx,
     config: Config,
 
+    /// Name of the tun interface.
     interface_name: String,
-    // /// holding on to the tunnel device and the log file ensures that the associated file
-    // handles /// live long enough and get closed when the tunnel is stopped
-    // tunnel_device: Tun,
 }
 
 impl BoringTun {
@@ -64,7 +62,6 @@ impl BoringTun {
 
         let boringtun_config = DeviceConfig {
             n_threads: 4,
-            // use_connected_socket: false, // TODO: what is this?
             #[cfg(target_os = "linux")]
             use_multi_queue: false, // TODO: what is this?
             api: Some(config_rx),
@@ -109,11 +106,9 @@ impl BoringTun {
         let interface_name = async_tun.deref().tun_name().unwrap();
 
         log::info!("passing tunnel dev to boringtun");
-        let device_handle: DeviceHandle =
-            // TODO: don't pass file descriptor as a string -_-
-            DeviceHandle::new(async_tun, boringtun_config)
-                .await
-                .map_err(TunnelError::BoringTunDevice)?;
+        let device_handle: DeviceHandle = DeviceHandle::new(async_tun, boringtun_config)
+            .await
+            .map_err(TunnelError::BoringTunDevice)?;
 
         set_boringtun_config(&mut config_tx, config).await;
 
@@ -134,7 +129,6 @@ impl BoringTun {
             config: config.clone(),
             config_tx,
             interface_name,
-            // tunnel_device: tun,
         })
     }
 }
@@ -142,17 +136,12 @@ impl BoringTun {
 #[async_trait::async_trait]
 impl Tunnel for BoringTun {
     fn get_interface_name(&self) -> String {
-        // self.tunnel_device.interface_name()
         self.interface_name.clone()
     }
 
     fn stop(self: Box<Self>) -> Result<(), TunnelError> {
-        // TODO: ASYNC!
-        log::info!("BoringTun::stop");
-        tokio::spawn(async {
-            self.device_handle.stop().await;
-        });
-        std::thread::sleep(std::time::Duration::from_millis(1000));
+        log::info!("BoringTun::stop"); // remove me
+        tokio::runtime::Handle::current().block_on(self.device_handle.stop());
         Ok(())
     }
 
@@ -185,12 +174,9 @@ impl Tunnel for BoringTun {
         &'a mut self,
         config: Config,
     ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), TunnelError>> + Send + 'a>> {
-        self.config = config.clone();
-
-        // TODO:
-        let mut tx = self.config_tx.clone();
         Box::pin(async move {
-            set_boringtun_config(&mut tx, &config).await;
+            self.config = config;
+            set_boringtun_config(&mut self.config_tx, &self.config).await;
             Ok(())
         })
     }

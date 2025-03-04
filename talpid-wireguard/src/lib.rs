@@ -58,7 +58,6 @@ mod mtu_detection;
 #[cfg(wireguard_go)]
 use self::wireguard_go::WgGoTunnel;
 
-// On android we only have Wireguard Go tunnel
 type TunnelType = Box<dyn Tunnel>;
 
 type Result<T> = std::result::Result<T, Error>;
