@@ -41,7 +41,7 @@ msgstr[1] ""
 msgid "Account paid until %(expiry)s."
 msgstr ""
 
-msgid "Account settings"
+msgid "Accofftings"
 msgstr ""
 
 msgid "Add"
@@ -53,7 +53,7 @@ msgstr ""
 msgid "Apply"
 msgstr ""
 
-msgid "Automatic"
+msgid "Au..matic"
 msgstr ""
 
 msgid "Back"
@@ -65,16 +65,16 @@ msgstr ""
 msgid "Blocking internet"
 msgstr ""
 
-msgid "Buy credit"
+msgid "Bu...edit"
 msgstr ""
 
-msgid "Buy more credit"
+msgid "Bu....edit"
 msgstr ""
 
-msgid "Cancel"
+msgid "Ca...el"
 msgstr ""
 
-msgid "Cipher"
+msgid "Ci...er"
 msgstr ""
 
 msgid "Clear"
@@ -83,19 +83,19 @@ msgstr ""
 msgid "Close"
 msgstr ""
 
-msgid "Connect"
+msgid "Con...nect"
 msgstr ""
 
-msgid "Connected"
+msgid "Conne....cted"
 msgstr ""
 
 msgid "CONNECTED"
 msgstr ""
 
-msgid "Connecting"
+msgid "Conn....cting"
 msgstr ""
 
-msgid "CONNECTING..."
+msgid "CONNE..NG..."
 msgstr ""
 
 #. Creating a secure connection that isn't breakable by quantum computers.
@@ -248,7 +248,7 @@ msgstr ""
 msgid "SECURE CONNECTION"
 msgstr ""
 
-msgid "Settings"
+msgid "Sett...gs"
 msgstr ""
 
 msgid "System default"
@@ -1620,7 +1620,7 @@ msgid "Find another app"
 msgstr ""
 
 msgctxt "split-tunneling-view"
-msgid "If it’s already running, close %(applicationName)s before launching it from here. Otherwise it might not be excluded from the VPN tunnel."
+msgid "If i............ose %(applicationName)s before launching it from here. Otherwise it might not be excluded from the VPN tunnel."
 msgstr ""
 
 msgctxt "split-tunneling-view"
@@ -1628,7 +1628,7 @@ msgid "Launch"
 msgstr ""
 
 msgctxt "split-tunneling-view"
-msgid "Open System Settings"
+msgid "O.tings"
 msgstr ""
 
 #. This error message is shown if the user tries to launch a Linux desktop
